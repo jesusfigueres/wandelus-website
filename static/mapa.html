@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha384-sHL9NAb7lN7rfvG5lfHpm643Xkcjzp4jFvuavGOndn6pjVqS6ny56CAt3nsEVT4H" crossorigin="anonymous">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha384-cxOPjt7s7Iz04uaHJceBmS+qpjv2JkIHNVcuOrM+YHwZOmJGBXI00mdUXEq65HTH" crossorigin="anonymous"></script>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@500;700&display=swap" rel="stylesheet">
+<style>
+html,body,#m{margin:0;height:100%;background:#EADFCB}
+.leaflet-tile-pane{filter:grayscale(.55) sepia(.22) brightness(1.04) contrast(.95)}
+.pin{font:700 13px Figtree,sans-serif;background:#F5EFE4;color:#1C2230;border:1.5px solid #1C2230;padding:4px 9px;border-radius:999px;white-space:nowrap;box-shadow:0 2px 0 #1C2230;transform:translate(-50%,-50%);display:inline-block;cursor:pointer}
+.pin.on{background:#B04A2F;color:#fff;border-color:#6E1E2A;box-shadow:0 2px 0 #6E1E2A}
+.pin:hover{background:#1D4E63;color:#F5EFE4}
+.leaflet-div-icon{background:none;border:none}
+.leaflet-tooltip{font:500 12px Figtree,sans-serif;border-radius:6px;border:1px solid #D9C9AC}
+</style></head><body><div id="m"></div>
+<script>
+// Los hoteles REALES del catálogo de Wandelus (coordenadas del registro de turismo), no los de ejemplo.
+// `ids` = claves de producto separadas por comas; `focus` = la del hotel resaltado.
+const q = new URLSearchParams(location.search);
+const ids = (q.get('ids') || '').split(',').filter(Boolean);
+const focus = q.get('focus') || '';
+const map = L.map('m', {zoomControl: true, scrollWheelZoom: false, attributionControl: true});
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {attribution: '© OpenStreetMap contributors', maxZoom: 18}).addTo(map);
+fetch('api/catalog').then(r => r.json()).then(c => {
+  const all = (c.products || []).filter(p => p.attributes && p.attributes.geo && p.attributes.geo.lat);
+  const list = ids.length ? all.filter(p => ids.includes(p.product_key)) : all;
+  const pts = [];
+  list.forEach(p => {
+    const g = p.attributes.geo, on = p.product_key === focus;
+    const from = Math.min(...p.skus.map(s => s.price));
+    const m = L.marker([g.lat, g.lon], {icon: L.divIcon({className: '', html: `<span class="pin${on ? ' on' : ''}">${Math.round(from)} €</span>`, iconSize: [0, 0]})}).addTo(map);
+    m.bindTooltip(`${p.name} · ${(g.municipality || '').split('/')[0]}`, {direction: 'top', offset: [0, -14]});
+    m.on('click', () => parent.postMessage({type: 'wandelus-hotel', id: p.product_key}, '*'));
+    pts.push([g.lat, g.lon]);
+  });
+  if (pts.length === 1) map.setView(pts[0], Number(q.get('zoom') || 13));
+  else if (pts.length) map.fitBounds(pts, {padding: [40, 40]});
+  else map.setView([39.2, -0.3], 8);
+});
+</script></body></html>
