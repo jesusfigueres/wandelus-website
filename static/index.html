@@ -413,6 +413,37 @@
 </div>
 </sc-if>
 
+<sc-if value="{{ isKarma }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1240px;margin:0 auto;padding:36px clamp(16px,4vw,40px) 64px;display:flex;flex-direction:column;gap:32px">
+  <div style="display:flex;flex-direction:column;gap:10px;max-width:720px"><span style="font:400 13px/1 Marcellus,serif;letter-spacing:.2em;text-transform:uppercase;color:#B04A2F">Recomienda y gana</span><h1 style="margin:0;font:400 clamp(30px,4.4vw,48px)/1.08 'Young Serif',serif;text-wrap:balance">Comparte la costa que te gusta y suma puntos karma</h1><p style="margin:0;font-size:16px;line-height:1.6;color:#4A4F5C">¿Te ha encantado un hotel Wandelus? Recomiéndalo a tus amigos con tu enlace personal. Cada vez que alguien llega por tu enlace ganas puntos karma: unos cuantos cuando nos visita, más cuando se registra y muchos más cuando reserva.</p></div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:1px;background:#D9C9AC;border:1px solid #D9C9AC;border-radius:16px;overflow:hidden">
+    <sc-for list="{{ karmaSteps }}" as="k" hint-placeholder-count="3">
+      <div style="background:#fff;padding:24px 22px;display:flex;flex-direction:column;gap:10px">
+        <span style="font:400 14px Marcellus,serif;letter-spacing:.16em;color:#B04A2F">{{ k.n }}</span>
+        <span style="font:400 22px/1.2 'Young Serif',serif">{{ k.title }}</span>
+        <span style="font-size:15px;line-height:1.55;color:#4A4F5C">{{ k.text }}</span>
+      </div>
+    </sc-for>
+  </div>
+  <div style="background:#1D4E63;color:#F5EFE4;border-radius:18px;padding:26px clamp(20px,3vw,32px);display:flex;flex-direction:column;gap:14px;max-width:760px">
+    <sc-if value="{{ karmaNotJoined }}">
+      <span style="font:400 24px/1.25 'Young Serif',serif">Únete al programa, es gratis</span>
+      <span style="font-size:15px;line-height:1.55;opacity:.9">Te damos un enlace para compartir. Si aún no tienes cuenta, primero te pediremos tu nombre y tu email.</span>
+      <button onClick="{{ joinKarma }}" style="align-self:flex-start;background:#B04A2F;color:#fff;border:0;border-radius:999px;padding:12px 22px;font:600 15px Figtree,sans-serif;cursor:pointer" style-hover="background:#6E1E2A">Unirme</button>
+    </sc-if>
+    <sc-if value="{{ karmaJoined }}">
+      <span style="font:400 24px/1.25 'Young Serif',serif">Ya estás dentro. Este es tu enlace</span>
+      <span style="font-size:14px;opacity:.9">Tu código: <b>{{ karmaCode }}</b></span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+        <span style="flex:1 1 280px;min-width:0;background:#F5EFE4;color:#1C2230;border-radius:10px;padding:11px 14px;font-size:14px;word-break:break-all;user-select:all">{{ karmaLink }}</span>
+        <button onClick="{{ copyKarma }}" style="background:#F5EFE4;color:#1D4E63;border:0;border-radius:999px;padding:10px 16px;font:600 14px Figtree,sans-serif;cursor:pointer">{{ karmaCopyLabel }}</button>
+      </div>
+    </sc-if>
+  </div>
+  <span style="font-size:12px;line-height:1.5;color:#4A4F5C">Web de demostración: los puntos karma son ficticios.</span>
+</div>
+</sc-if>
+
 </main>
 
 <sc-if value="{{ regOpen }}">
@@ -486,13 +517,25 @@ const fmt = n => Math.round(n).toLocaleString('es-ES') + ' €';
 const ago = iso => { if(!iso) return ''; const m=(Date.now()-new Date(iso).getTime())/60000; if(m<60) return `hace ${Math.max(1,Math.round(m))} min`; if(m<1440) return `hace ${Math.round(m/60)} h`; return `hace ${Math.round(m/1440)} días`; };
 const isoDay = d => d.toISOString().slice(0,10);
 // La noche toma el tipo de su día de SALIDA (KairosUnda.md §21.4); sin calendario de festivos en la web, sólo laborable/fin de semana.
+// KarmaNet: código de recomendación corto y determinista a partir del customer_key (FNV-1a 32 bits, base 36).
+const KARMA_LS = 'monbi_karmanet_code';
+const karmaCodeOf = key => { let h = 0x811c9dc5; for (const ch of String(key)) { h ^= ch.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return 'WA' + ('000000' + h.toString(36)).slice(-6).toUpperCase(); };
+const karmaStored = () => { try { return window.localStorage.getItem(KARMA_LS); } catch (e) { return null; } };
+const karmaStore = c => { try { window.localStorage.setItem(KARMA_LS, c); } catch (e) { /* sin almacenamiento */ } };
+const karmaLinkOf = c => location.origin + location.pathname + '?ref=' + encodeURIComponent(c);
+const KARMA_STEPS = [
+  {n:'I', title:'Comparte tu enlace', text:'Envíalo a quien quieras: amigos, familia o tu grupo de viaje.'},
+  {n:'II', title:'Tus amigos nos visitan y se registran', text:'Sumas puntos karma por cada visita que llega por tu enlace, y más si se dan de alta.'},
+  {n:'III', title:'Reservan y ganas más', text:'Cuando alguien reserva un hotel Wandelus por tu recomendación, te llevas la mayor parte de los puntos.'}
+];
 const nightType = (dateStr) => { const d=new Date(dateStr+'T12:00:00'); d.setDate(d.getDate()+1); const w=d.getDay(); return (w===0||w===6)?'weekend':'weekday'; };
 
 class Component extends DCLogic {
   state = { page:'home', hotelKey:null, draft:'', typing:false, filters:[], zone:null, products:[], messages:[], chatError:false,
     threads:[], comments:[], forumCat:'Todos', threadId:null, showNewThread:false, ntCat:FORUM_CATS[0], ntTitle:'', ntBody:'', replyDraft:'',
     saved:{}, rating:0, opinionDraft:'', room:null, arrival:isoDay(new Date(Date.now()+14*864e5)), nights:3, bookMsg:null,
-    reg:false, regDone:false, regName:'', regEmail:'', regPhone:'', regError:null, pendingBook:false };
+    reg:false, regDone:false, regName:'', regEmail:'', regPhone:'', regError:null, pendingBook:false,
+    karmaCode:null, karmaFired:false, pendingKarma:false, karmaCopied:false };
   componentDidMount() {
     this._onMsg = e => { if (e.data && e.data.type === 'wandelus-hotel') this.openHotel(e.data.id); };
     window.addEventListener('message', this._onMsg);
@@ -503,6 +546,18 @@ class Component extends DCLogic {
   componentWillUnmount() { window.removeEventListener('message', this._onMsg); }
   loadForum() { MONBI.forum().then(f => this.setState({ threads:f.threads||[], comments:f.comments||[] })).catch(()=>{}); }
   go(page) { this.setState({page}); MONBI.page(page); window.scrollTo(0, 0); }
+  openKarma() {
+    this.go('karmanet'); MONBI.track('karmanet_page_open');
+    if (MONBI.customer && karmaStored()) this.setState({karmaCode:karmaCodeOf(MONBI.customer)});
+  }
+  joinKarma() { if (this.needAccount(false, true)) return; this.completeKarma(); }
+  completeKarma() {
+    if (!MONBI.customer) return;
+    const code = karmaCodeOf(MONBI.customer);
+    // karmanet_register_new sale UNA sola vez por visitante (localStorage; en memoria si no hay almacenamiento).
+    if (!karmaStored() && !this.state.karmaFired) { MONBI.track('karmanet_register_new', {value:{referral_code:code}}); karmaStore(code); }
+    this.setState({karmaCode:code, karmaFired:true, pendingKarma:false});
+  }
   openHotel(key) { this.setState({page:'hotel', hotelKey:key, room:null, bookMsg:null, rating:0, opinionDraft:''}); MONBI.page('hotel'); MONBI.track('product_view', {element:key}); window.scrollTo(0, 0); }
   deco(p) {
     const a = p.attributes||{}, g = a.geo||{}, from = Math.min(...p.skus.map(s=>s.price));
@@ -539,7 +594,7 @@ class Component extends DCLogic {
       return {key:k.sku_key, label:(ROOM[a.x_room_type]||k.label) + ' · ' + (((a.max_occupancy||{}).adults||2) === 1 ? '1 adulto' : 'hasta ' + ((a.max_occupancy||{}).adults||2) + ' adultos'), price, size:a.x_size_m2}; })
       .sort((x,y)=>x.price-y.price);
   }
-  needAccount(afterBook) { if (MONBI.customer) return false; this.setState({reg:true, regDone:false, pendingBook:!!afterBook}); return true; }
+  needAccount(afterBook, afterKarma) { if (MONBI.customer) return false; this.setState({reg:true, regDone:false, pendingBook:!!afterBook, pendingKarma:!!afterKarma}); return true; }
   doBook() {
     const S=this.state, p=S.products.find(x=>x.product_key===S.hotelKey); if (!p) return;
     const rooms=this.roomsOf(p), r=rooms.find(x=>x.key===S.room)||rooms[0];
@@ -556,7 +611,7 @@ class Component extends DCLogic {
     const comarcas = {}; all.forEach(p => { const c=p.attributes.x_comarca; const t=title(((p.attributes.geo||{}).municipality||'').split('/')[0]); if(c){ (comarcas[c]=comarcas[c]||new Set()).add(t); } });
     const zones = Object.entries(comarcas).sort((a,b)=>b[1].size-a[1].size).slice(0,5).map(([c,towns]) => ({name:title(c), towns:Array.from(towns).slice(0,3).join(', '), img:'zona-'+c.toLowerCase().replace(/[^a-z]+/g,'-'),
       go:() => { this.setState({zone:c, page:'results'}); MONBI.page('results'); MONBI.track('zone_select', {element:c}); window.scrollTo(0,0); }}));
-    const nav = [['Asistente','chat'],['Hoteles','results'],['Foro','forum'],['Guías','guides']].map(([label,p]) => ({label, line: S.page===p || (p==='results' && S.page==='hotel') || (p==='forum' && S.page==='thread') ? '#B04A2F' : 'transparent', go: () => { if (p==='results') this.setState({zone:null}); this.go(p); }}));
+    const nav = [['Asistente','chat'],['Hoteles','results'],['Foro','forum'],['Guías','guides'],['Recomienda','karmanet']].map(([label,p]) => ({label, line: S.page===p || (p==='results' && S.page==='hotel') || (p==='forum' && S.page==='thread') ? '#B04A2F' : 'transparent', go: () => { if (p==='karmanet') return this.openKarma(); if (p==='results') this.setState({zone:null}); this.go(p); }}));
     const ofTarget = t => S.comments.filter(c => c.target === t);
     const asC = c => ({initial:(c.author||'A')[0].toUpperCase(), name:c.author||'Anónimo', ago:ago(c.created_at), text:c.text, stars:c.rating?'★'.repeat(Math.round(c.rating)):''});
     const threadsAll = S.threads.map(t => ({...t, cat:t.category||'General', last:ago(t.created_at), replies:ofTarget(t.id).length, initial:(t.author||'A')[0].toUpperCase(),
@@ -572,7 +627,7 @@ class Component extends DCLogic {
     const nights = Math.max(1, Number(S.nights)||1);
     const guides = GUIDES.map((g,i) => ({...g, img:'guia-' + i}));
     return {
-      nav, isHome:S.page==='home', isChat:S.page==='chat', isResults:S.page==='results', isHotel:S.page==='hotel', isForum:S.page==='forum', isThread:S.page==='thread', isGuides:S.page==='guides',
+      nav, isHome:S.page==='home', isChat:S.page==='chat', isResults:S.page==='results', isHotel:S.page==='hotel', isForum:S.page==='forum', isThread:S.page==='thread', isGuides:S.page==='guides', isKarma:S.page==='karmanet',
       nHotels: all.length, accountLabel: MONBI.customer ? 'Mi cuenta' : 'Entrar',
       goHome:() => this.go('home'), goChat:() => this.go('chat'), goResults:() => { this.setState({zone:null}); this.go('results'); }, goForum:() => this.go('forum'), goGuides:() => this.go('guides'),
       draft:S.draft, onDraft:e => this.setState({draft:e.target.value}),
@@ -599,6 +654,10 @@ class Component extends DCLogic {
       arrival:S.arrival, onArrival:e=>this.setState({arrival:e.target.value}), nights:S.nights, onNights:e=>this.setState({nights:e.target.value}),
       roomLabel: chosen ? chosen.label.split(' · ')[0] : '—', nightsLabel: nights + (nights===1?' noche':' noches'), stayTotal: chosen ? fmt(chosen.price*nights) : '—',
       bookMsg:!!S.bookMsg, bookMsgText:S.bookMsg||'',
+      karmaSteps:KARMA_STEPS, karmaJoined:!!(MONBI.customer && S.karmaCode), karmaNotJoined:!(MONBI.customer && S.karmaCode),
+      karmaCode:S.karmaCode||'', karmaLink:S.karmaCode ? karmaLinkOf(S.karmaCode) : '', karmaCopyLabel:S.karmaCopied ? '✓ Copiado' : 'Copiar enlace',
+      joinKarma:() => this.joinKarma(),
+      copyKarma:() => { try { navigator.clipboard.writeText(karmaLinkOf(S.karmaCode)).then(() => this.setState({karmaCopied:true})).catch(()=>{}); } catch (e) { /* sin portapapeles */ } },
       book:() => { if (this.needAccount(true)) return; this.doBook(); },
       stars:[1,2,3,4,5].map(n => ({color:n<=S.rating?'#B04A2F':'#D9C9AC', pick:()=>this.setState({rating:n})})),
       opinionDraft:S.opinionDraft, onOpinion:e=>this.setState({opinionDraft:e.target.value}),
@@ -614,16 +673,17 @@ class Component extends DCLogic {
       replyDraft:S.replyDraft, onReply:e=>this.setState({replyDraft:e.target.value}),
       sendReply:() => { if (this.needAccount()) return; if (!S.replyDraft.trim()) return; MONBI.comment({target:th.id, text:S.replyDraft, author:S.regName||'Viajero'}).then(()=>{ this.setState({replyDraft:''}); this.loadForum(); }); },
       regOpen:S.reg, regDone:S.regDone, regForm:!S.regDone, closeReg:()=>this.setState({reg:false}), stop:e=>e.stopPropagation(),
-      openReg:() => { this.setState({reg:true, regDone:!!MONBI.customer, pendingBook:false}); MONBI.track('signin_open'); },
+      openReg:() => { this.setState({reg:true, regDone:!!MONBI.customer, pendingBook:false, pendingKarma:false}); MONBI.track('signin_open'); },
       regTitle: S.pendingBook ? 'Tus datos para la reserva' : 'Únete a Wandelus',
-      regIntro: S.pendingBook ? 'Para confirmar la reserva necesitamos tu nombre y tu email.' : 'Guarda hoteles, participa en el foro y recibe ofertas de temporada.',
+      regIntro: S.pendingBook ? 'Para confirmar la reserva necesitamos tu nombre y tu email.' : S.pendingKarma ? 'Para darte tu enlace de recomendación necesitamos tu nombre y tu email.' : 'Guarda hoteles, participa en el foro y recibe ofertas de temporada.',
       regCta: S.pendingBook ? 'Confirmar reserva' : 'Crear cuenta',
-      regDoneText: S.bookMsg || 'Listo. Ya puedes guardar hoteles y participar en el foro.',
+      regDoneText: S.bookMsg || (S.karmaCode ? 'Listo. Ya tienes tu enlace de recomendación.' : 'Listo. Ya puedes guardar hoteles y participar en el foro.'),
       regName:S.regName, onRegName:e=>this.setState({regName:e.target.value}), regEmail:S.regEmail, onRegEmail:e=>this.setState({regEmail:e.target.value}),
       regPhone:S.regPhone, onRegPhone:e=>this.setState({regPhone:e.target.value}), regError:!!S.regError, regErrorText:S.regError||'',
       submitReg:() => { if (!/.+@.+\..+/.test(S.regEmail)) { this.setState({regError:'Escribe un email válido.'}); return; }
         MONBI.register({kind:'traveller', name:S.regName, email:S.regEmail, phone:S.regPhone}).then(() => {
           if (S.pendingBook) this.doBook();
+          if (S.pendingKarma) this.completeKarma();
           this.setState({regDone:true, regError:null});
         }).catch(()=>this.setState({regError:'No se pudo completar. Inténtalo de nuevo.'})); }
     };
